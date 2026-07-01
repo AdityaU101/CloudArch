@@ -1,0 +1,319 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: architectures
+    description: Cloud architecture generation and management
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /architectures:
+    get:
+      operationId: listArchitectures
+      tags: [architectures]
+      summary: List all saved architectures
+      responses:
+        "200":
+          description: List of architectures
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Architecture"
+    post:
+      operationId: saveArchitecture
+      tags: [architectures]
+      summary: Save a generated architecture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchitectureInput"
+      responses:
+        "201":
+          description: Saved architecture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Architecture"
+
+  /architectures/{id}:
+    get:
+      operationId: getArchitecture
+      tags: [architectures]
+      summary: Get a single architecture by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Architecture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Architecture"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateArchitecture
+      tags: [architectures]
+      summary: Update an architecture (e.g. rename)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchitectureUpdate"
+      responses:
+        "200":
+          description: Updated architecture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Architecture"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteArchitecture
+      tags: [architectures]
+      summary: Delete an architecture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /architectures/generate:
+    post:
+      operationId: generateArchitecture
+      tags: [architectures]
+      summary: Generate an AWS architecture from natural language requirements (SSE stream)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateArchitectureInput"
+      responses:
+        "200":
+          description: SSE stream of architecture sections
+          content:
+            text/event-stream: {}
+
+  /architectures/{id}/terraform:
+    get:
+      operationId: downloadTerraform
+      tags: [architectures]
+      summary: Download Terraform files for an architecture as plain text
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Terraform HCL content
+          content:
+            text/plain: {}
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /architectures/stats:
+    get:
+      operationId: getArchitectureStats
+      tags: [architectures]
+      summary: Get stats about saved architectures (counts, recent activity)
+      responses:
+        "200":
+          description: Stats summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchitectureStats"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Architecture:
+      type: object
+      required: [id, title, requirements, diagram, terraform, costEstimate, securityRecommendations, highAvailabilityPlan, databaseRecommendation, kubernetesDeployment, cicdPipeline, monitoringSetup, disasterRecovery, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        requirements:
+          type: string
+        diagram:
+          type: string
+          description: Mermaid diagram source
+        terraform:
+          type: string
+          description: Terraform HCL content
+        costEstimate:
+          type: string
+        securityRecommendations:
+          type: string
+        highAvailabilityPlan:
+          type: string
+        databaseRecommendation:
+          type: string
+        kubernetesDeployment:
+          type: string
+        cicdPipeline:
+          type: string
+        monitoringSetup:
+          type: string
+        disasterRecovery:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ArchitectureInput:
+      type: object
+      required: [title, requirements, diagram, terraform, costEstimate, securityRecommendations, highAvailabilityPlan, databaseRecommendation, kubernetesDeployment, cicdPipeline, monitoringSetup, disasterRecovery]
+      properties:
+        title:
+          type: string
+        requirements:
+          type: string
+        diagram:
+          type: string
+        terraform:
+          type: string
+        costEstimate:
+          type: string
+        securityRecommendations:
+          type: string
+        highAvailabilityPlan:
+          type: string
+        databaseRecommendation:
+          type: string
+        kubernetesDeployment:
+          type: string
+        cicdPipeline:
+          type: string
+        monitoringSetup:
+          type: string
+        disasterRecovery:
+          type: string
+
+    ArchitectureUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        requirements:
+          type: string
+        diagram:
+          type: string
+        terraform:
+          type: string
+        costEstimate:
+          type: string
+        securityRecommendations:
+          type: string
+        highAvailabilityPlan:
+          type: string
+        databaseRecommendation:
+          type: string
+        kubernetesDeployment:
+          type: string
+        cicdPipeline:
+          type: string
+        monitoringSetup:
+          type: string
+        disasterRecovery:
+          type: string
+
+    GenerateArchitectureInput:
+      type: object
+      required: [requirements]
+      properties:
+        requirements:
+          type: string
+          description: Natural language description of the application requirements
+
+    ArchitectureStats:
+      type: object
+      required: [totalCount, recentCount, latestTitle]
+      properties:
+        totalCount:
+          type: integer
+        recentCount:
+          type: integer
+          description: Architectures created in the last 7 days
+        latestTitle:
+          type: ["string", "null"]
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
