@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mermaid } from "./mermaid";
 import { CodeBlock } from "./code-block";
-import { ArchitectureCanvas } from "./studio/architecture-canvas";
+import { ArchitectureCanvas, useArchitectureGraph } from "./studio/architecture-canvas";
 import { Button } from "@/components/ui/button";
 import { Download, PenLine, GitBranch } from "lucide-react";
 
@@ -40,6 +40,8 @@ function TextSection({ value, emptyLabel }: { value?: string; emptyLabel: string
  */
 function DiagramTab({ diagram }: { diagram?: string }) {
   const [view, setView] = useState<"studio" | "blueprint">("studio");
+  // Own the graph here so edits survive switching between Studio and Blueprint.
+  const graph = useArchitectureGraph(diagram);
 
   return (
     <div className="space-y-4">
@@ -61,7 +63,7 @@ function DiagramTab({ diagram }: { diagram?: string }) {
       </div>
 
       {view === "studio" ? (
-        <ArchitectureCanvas seedMermaid={diagram} />
+        <ArchitectureCanvas graph={graph} />
       ) : (
         <Card>
           <CardContent className="pt-6">

@@ -21,7 +21,7 @@ export const ServiceNode = memo(function ServiceNode({ data, selected }: NodePro
 
   return (
     <div
-      className="group relative flex w-[196px] items-center gap-3 overflow-hidden rounded-xl border bg-card/95 px-3 py-2.5 backdrop-blur-sm transition-shadow duration-200"
+      className="group relative flex w-[216px] items-center gap-3 overflow-hidden rounded-xl border bg-card/95 px-3.5 py-3 backdrop-blur-sm transition-shadow duration-200"
       style={{
         borderColor: selected ? `hsl(${hue})` : "hsl(var(--card-border))",
         boxShadow: selected
@@ -33,14 +33,14 @@ export const ServiceNode = memo(function ServiceNode({ data, selected }: NodePro
       <span className="absolute inset-y-0 left-0 w-1" style={{ background: `hsl(${hue})` }} />
 
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
         style={{ background: `hsl(${hue} / 0.14)`, color: `hsl(${hue})` }}
       >
-        {Icon ? <Icon className="h-[18px] w-[18px]" /> : null}
+        {Icon ? <Icon className="h-5 w-5" /> : null}
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium leading-tight text-foreground">{d.label}</div>
+        <div className="truncate text-sm font-semibold leading-tight text-foreground">{d.label}</div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span style={{ color: `hsl(${hue})` }}>{cat?.label ?? "Service"}</span>
           {spec && spec.monthly > 0 && (
