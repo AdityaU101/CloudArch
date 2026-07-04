@@ -1,5 +1,6 @@
 import { useListArchitectures, useGetArchitectureStats, useDeleteArchitecture, getListArchitecturesQueryKey, getGetArchitectureStatsQueryKey } from "@workspace/api-client-react";
 import { Link } from "wouter";
+import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,8 +79,14 @@ export default function Architectures() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {architectures?.map((arch) => (
-              <Card key={arch.id} className="group hover:border-primary/50 transition-colors">
+            {architectures?.map((arch, i) => (
+              <motion.div
+                key={arch.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: Math.min(i * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] }}
+              >
+              <Card className="group h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5">
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <div>
@@ -120,6 +127,7 @@ export default function Architectures() {
                   <p className="text-sm text-muted-foreground line-clamp-2">{arch.requirements}</p>
                 </CardContent>
               </Card>
+              </motion.div>
             ))}
           </div>
         )}

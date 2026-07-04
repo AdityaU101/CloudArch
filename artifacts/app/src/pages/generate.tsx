@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +8,13 @@ import { ArchitectureViewer } from "@/components/architecture-viewer";
 import { useSaveArchitecture, getListArchitecturesQueryKey, getGetArchitectureStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Server, Loader2, Save } from "lucide-react";
+import { Server, Loader2, Save, Sparkles, Wand2 } from "lucide-react";
+
+const EXAMPLES = [
+  "A multi-tenant SaaS that processes 10k video uploads/day with auto-scaling and SOC2 compliance.",
+  "A low-latency e-commerce API for 1M users with a PostgreSQL database and global CDN.",
+  "An event-driven data pipeline ingesting IoT telemetry with real-time dashboards.",
+];
 
 export default function Generate() {
   const [requirements, setRequirements] = useState("");
@@ -34,35 +41,61 @@ export default function Generate() {
         body: JSON.stringify({ requirements }),
       });
       
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response body");
-      
+      if (!response.ok || !response.body) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      
+      let buffer = "";
+
+      const handleEvent = (raw: string) => {
+        // An SSE record may contain multiple "data:" lines; concatenate them.
+        const dataPayload = raw
+          .split("\n")
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(l.indexOf(":") + 1).replace(/^ /, ""))
+          .join("\n");
+        if (!dataPayload) return;
+
+        let event: any;
+        try {
+          event = JSON.parse(dataPayload);
+        } catch {
+          // A genuinely incomplete/invalid record — skip it.
+          return;
+        }
+
+        if (event.type === "chunk") {
+          setStreamText((prev) => prev + (event.content ?? ""));
+        } else if (event.type === "done") {
+          setResult(event.result);
+        } else if (event.type === "error") {
+          toast({
+            title: "Generation Failed",
+            description: event.error,
+            variant: "destructive",
+          });
+        }
+      };
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-        
-        const text = decoder.decode(value);
-        for (const line of text.split("\n")) {
-          if (line.startsWith("data: ")) {
-            try {
-              const event = JSON.parse(line.slice(6));
-              if (event.type === "chunk") {
-                setStreamText(prev => prev + event.chunk);
-              } else if (event.type === "done") {
-                setResult(event.result);
-              } else if (event.type === "error") {
-                toast({
-                  title: "Generation Failed",
-                  description: event.error,
-                  variant: "destructive",
-                });
-              }
-            } catch (e) {
-              // Ignore parse errors for incomplete chunks if any
-            }
-          }
+        // Decode incrementally so multi-byte UTF-8 split across reads isn't corrupted.
+        buffer += decoder.decode(value, { stream: !done });
+
+        // Process every complete SSE record (records are separated by a blank line).
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const record = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          if (record.trim()) handleEvent(record);
+        }
+
+        if (done) {
+          // Flush any trailing record that wasn't newline-terminated.
+          if (buffer.trim()) handleEvent(buffer);
+          break;
         }
       }
     } catch (error) {
@@ -106,72 +139,118 @@ export default function Generate() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Generate Architecture</h1>
-        <p className="text-muted-foreground">Describe your application in plain English, and our AI solutions architect will design the AWS infrastructure.</p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8 p-8">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        className="space-y-2"
+      >
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+          <Sparkles className="h-3 w-3" />
+          AI Solutions Architect
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight">Design your cloud architecture</h1>
+        <p className="max-w-2xl text-muted-foreground">
+          Describe your application in plain English. Get a costed, editable AWS design with security, scaling, and disaster-recovery guidance.
+        </p>
+      </motion.div>
 
-      <Card className="border-primary/20 shadow-sm bg-card/50">
+      <Card className="overflow-hidden border-primary/15 bg-card/50 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Server className="w-5 h-5 text-primary" />
-            System Requirements
+            <Server className="h-5 w-5 text-primary" />
+            System requirements
           </CardTitle>
-          <CardDescription>Be as detailed as possible about scale, security, and compliance needs.</CardDescription>
+          <CardDescription>Include scale, traffic, data, security, and compliance needs for the best result.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea 
+          <Textarea
             placeholder="e.g. A multi-tenant SaaS application that processes 10,000 video uploads per day. We need high availability, auto-scaling, and a PostgreSQL database. Must comply with SOC2."
-            className="min-h-[150px] font-mono text-sm bg-zinc-950/50"
+            className="min-h-[150px] resize-none bg-background/60 font-mono text-sm"
             value={requirements}
             onChange={(e) => setRequirements(e.target.value)}
           />
-          <Button 
-            onClick={handleGenerate} 
-            disabled={isGenerating || !requirements.trim()}
-            className="w-full sm:w-auto"
-          >
+
+          {!requirements && !isGenerating && (
+            <div className="flex flex-wrap gap-2">
+              <span className="py-1 text-xs text-muted-foreground">Try:</span>
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => setRequirements(ex)}
+                  className="hover-elevate rounded-full border border-border bg-muted/40 px-3 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {ex.length > 52 ? ex.slice(0, 52) + "…" : ex}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <Button onClick={handleGenerate} disabled={isGenerating || !requirements.trim()} className="w-full gap-2 sm:w-auto">
             {isGenerating ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Designing Infrastructure...
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Designing infrastructure…
               </>
             ) : (
-              "Generate Architecture"
+              <>
+                <Wand2 className="h-4 w-4" />
+                Generate architecture
+              </>
             )}
           </Button>
         </CardContent>
       </Card>
 
-      {isGenerating && !result && (
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-sm font-mono text-primary flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              STREAMING THOUGHTS...
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-zinc-950 p-4 rounded-md overflow-y-auto max-h-[300px] font-mono text-xs text-muted-foreground whitespace-pre-wrap">
-              {streamText || "Connecting to AI architect..."}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <AnimatePresence>
+        {isGenerating && !result && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+          >
+            <Card className="border-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 font-mono text-sm text-primary">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                  </span>
+                  Streaming design decisions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-[300px] overflow-y-auto whitespace-pre-wrap rounded-md bg-background/70 p-4 font-mono text-xs text-muted-foreground">
+                  {streamText || "Connecting to AI architect…"}
+                  <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-primary/70 align-middle" />
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {result && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold tracking-tight">Generated Design</h2>
-            <Button onClick={handleSave} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save Architecture
-            </Button>
-          </div>
-          <ArchitectureViewer architecture={result} />
-        </div>
-      )}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="space-y-6"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold tracking-tight">Generated design</h2>
+              <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save architecture
+              </Button>
+            </div>
+            <ArchitectureViewer architecture={result} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
