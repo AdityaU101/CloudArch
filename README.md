@@ -8,17 +8,21 @@ Given any set of requirements and a target cloud (AWS by default), the AI genera
 
 | Output | Description |
 |---|---|
-| **Architecture Diagram** | Color-coded AWS diagram with service relationships |
-| **Terraform HCL** | Deployable infrastructure-as-code with all resources |
-| **Kubernetes Manifests** | Deployment, Service, HPA, and Ingress YAML |
-| **CI/CD Pipeline** | GitHub Actions or AWS CodePipeline definition |
+| **Architecture Diagram** | Color-coded service diagram with relationships, editable in the interactive Studio |
+| **Terraform HCL** | Deployable infrastructure-as-code using the matching provider (`aws`, `azurerm`, or `google`) |
+| **Kubernetes Manifests** | Deployment, Service, HPA, and Ingress YAML targeting EKS, AKS, or GKE |
+| **CI/CD Pipeline** | GitHub Actions or the provider's native pipeline service |
 | **Cost Estimate** | Monthly breakdown per service with totals |
-| **Security Recommendations** | IAM, WAF, encryption, and compliance guidance |
-| **High Availability Plan** | Multi-AZ strategy, auto-scaling, and load balancing |
+| **Security Recommendations** | IAM, WAF, encryption, and compliance guidance using provider-native services |
+| **High Availability Plan** | Multi-zone strategy, auto-scaling, and load balancing |
 | **Database Recommendation** | Instance type, size, replication, and backup strategy |
-| **Monitoring Setup** | CloudWatch dashboards, alarms, and SNS alerting |
+| **Monitoring Setup** | Dashboards, alarms, and alerting (CloudWatch, Azure Monitor, or Cloud Monitoring) |
 | **Disaster Recovery Plan** | RTO/RPO targets and cross-region failover procedure |
 | **Threat Model** | STRIDE analysis, trust boundaries, attack vectors, risk matrix, and mitigations mapped to cloud-native security services |
+
+### Multi-Cloud
+
+Pick **AWS**, **Azure**, or **Google Cloud** on the Generate page and every output — diagram, IaC, costs, security, threat model — targets that provider's real services (EC2 → Azure VMs → Compute Engine, RDS → Azure SQL → Cloud SQL, S3 → Blob Storage → Cloud Storage, and so on). Saved architectures are tagged with their provider in the library.
 
 ### Architecture Validator
 
@@ -141,19 +145,27 @@ Open **http://localhost:5173** in your browser.
 ├── artifacts/
 │   ├── app/                  # React frontend (Vite + Tailwind)
 │   │   └── src/
-│   │       ├── components/   # UI components + Mermaid diagram renderer
-│   │       └── pages/        # Generate, Architectures, Detail
+│   │       ├── components/   # UI components, Mermaid renderer, Studio, threat model view
+│   │       ├── lib/          # SSE stream client, cloud provider metadata, insights
+│   │       └── pages/        # Generate, Validate, Architectures, Detail
 │   └── api-server/           # Express REST API
 │       └── src/
-│           ├── routes/       # Architecture CRUD + AI generation (SSE streaming)
-│           └── lib/          # Groq client, logger
+│           ├── routes/       # Architecture CRUD, AI generation + IaC validation (SSE streaming)
+│           └── lib/          # Groq client, provider-aware prompt builders, logger
 ├── lib/
+│   ├── api-spec/             # OpenAPI spec — source of truth for the generated clients
 │   ├── db/                   # Drizzle ORM schema + migrations
-│   ├── api-zod/              # Zod request/response validation
-│   └── api-client-react/     # TanStack Query hooks (auto-generated)
+│   ├── api-zod/              # Zod request/response validation (generated via orval)
+│   └── api-client-react/     # TanStack Query hooks (generated via orval)
 ├── docker-compose.yml        # Local PostgreSQL
 ├── .env.example
 └── pnpm-workspace.yaml
+```
+
+After changing `lib/api-spec/openapi.yaml`, regenerate the clients with:
+
+```bash
+cd lib/api-spec && pnpm run codegen
 ```
 
 ## How It Works
