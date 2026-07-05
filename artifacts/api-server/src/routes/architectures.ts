@@ -11,76 +11,13 @@ import {
   DownloadTerraformParams,
 } from "@workspace/api-zod";
 import { groq, GROQ_MODEL } from "../lib/groq";
+import {
+  buildGenerationSystemPrompt,
+  providerDisplayName,
+  resolveProvider,
+} from "../lib/prompts";
 
 const router = Router();
-
-const SYSTEM_PROMPT = `You are an expert AWS cloud architect. Given a set of business/application requirements, you produce a complete, production-ready cloud architecture plan.
-
-You MUST respond with a JSON object containing EXACTLY these fields (all required, all strings):
-{
-  "title": "Short descriptive title for this architecture",
-  "diagram": "A complete Mermaid diagram showing all AWS services and their connections",
-  "terraform": "Complete Terraform HCL code with provider config, all resources, variables, and outputs",
-  "costEstimate": "Detailed monthly cost breakdown per service with total estimate",
-  "securityRecommendations": "Numbered list of security best practices and specific AWS security services to use",
-  "highAvailabilityPlan": "Multi-AZ / multi-region strategy, load balancing, auto-scaling details",
-  "databaseRecommendation": "Specific database service recommendation with instance type, size, backup strategy",
-  "kubernetesDeployment": "Complete Kubernetes YAML manifests (Deployment, Service, HPA, Ingress)",
-  "cicdPipeline": "CI/CD pipeline definition using AWS CodePipeline or GitHub Actions YAML",
-  "monitoringSetup": "CloudWatch dashboards, alarms, log groups, and SNS alerting setup",
-  "disasterRecovery": "RTO/RPO targets, backup strategy, cross-region failover procedure"
-}
-
-CRITICAL MERMAID DIAGRAM RULES — follow exactly or the diagram will break:
-
-1. Start with "graph TD" (top-down) — never use flowchart, sequenceDiagram, or graph LR
-2. Node IDs: alphanumeric only, no spaces — User, ALB, EC2Auto, RDSPrimary
-3. Node labels must NEVER use quotes — write EC2(EC2 Auto Scaling) NOT EC2("EC2 Auto Scaling")
-4. Use these shapes:
-   - Rounded box for services: EC2(EC2 Instances)
-   - Cylinder for databases: RDS[(RDS Aurora)]
-   - Diamond for decisions: WAF{AWS WAF}
-   - Rectangle for groups: IGW[Internet Gateway]
-5. Use subgraphs to group by AWS boundary:
-   subgraph Internet[Public Internet]
-   subgraph VPC[AWS VPC - us-east-1]
-   subgraph AZ1[Availability Zone 1]
-6. Arrows: --> with optional label: EC2 -->|writes| S3
-7. Add classDef color blocks right after "graph TD" — copy these EXACTLY:
-   classDef compute fill:#FF9900,stroke:#E8871D,color:#000,font-weight:bold
-   classDef database fill:#3F48CC,stroke:#2E37B8,color:#fff,font-weight:bold
-   classDef network fill:#8C4FFF,stroke:#7B3FE4,color:#fff,font-weight:bold
-   classDef storage fill:#3F8624,stroke:#2E7218,color:#fff,font-weight:bold
-   classDef security fill:#DD344C,stroke:#C2293F,color:#fff,font-weight:bold
-   classDef cache fill:#C7131F,stroke:#A50E18,color:#fff,font-weight:bold
-   classDef user fill:#232F3E,stroke:#FF9900,color:#FF9900,font-weight:bold
-   classDef messaging fill:#E7157B,stroke:#C4106A,color:#fff,font-weight:bold
-8. After all nodes, assign classes: class EC2,Lambda,EKS compute
-9. NEVER put quotes anywhere in the diagram string
-
-Example of correct format:
-graph TD
-  classDef compute fill:#FF9900,stroke:#E8871D,color:#000,font-weight:bold
-  classDef database fill:#3F48CC,stroke:#2E37B8,color:#fff,font-weight:bold
-  classDef network fill:#8C4FFF,stroke:#7B3FE4,color:#fff,font-weight:bold
-  classDef storage fill:#3F8624,stroke:#2E7218,color:#fff,font-weight:bold
-  classDef security fill:#DD344C,stroke:#C2293F,color:#fff,font-weight:bold
-  Users([End Users]) --> CDN(CloudFront CDN)
-  CDN --> WAF{AWS WAF}
-  WAF --> ALB(Application Load Balancer)
-  subgraph VPC[AWS VPC]
-    ALB --> EC2(EC2 Auto Scaling Group)
-    EC2 --> RDS[(RDS Aurora PostgreSQL)]
-    EC2 --> Cache(ElastiCache Redis)
-    EC2 --> S3[S3 Object Storage]
-  end
-  class EC2 compute
-  class RDS database
-  class ALB,WAF network
-  class S3 storage
-  class Cache cache
-
-Be specific and thorough. Use real AWS service names, real instance types, real pricing. Make the Terraform and Kubernetes manifests actually deployable.`;
 
 router.get("/architectures", async (req, res) => {
   try {
@@ -132,15 +69,16 @@ router.post("/architectures/generate", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
 
   const { requirements } = parsed.data;
+  const provider = resolveProvider(parsed.data.provider);
 
   try {
     const stream = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildGenerationSystemPrompt(provider) },
         {
           role: "user",
-          content: `Generate a complete AWS cloud architecture for the following requirements:\n\n${requirements}`,
+          content: `Generate a complete ${providerDisplayName(provider)} cloud architecture for the following requirements:\n\n${requirements}`,
         },
       ],
       stream: true,
@@ -158,9 +96,9 @@ router.post("/architectures/generate", async (req, res) => {
       }
     }
 
-    let parsed: Record<string, string>;
+    let result: Record<string, unknown>;
     try {
-      parsed = JSON.parse(fullResponse);
+      result = JSON.parse(fullResponse);
     } catch {
       res.write(
         `data: ${JSON.stringify({ type: "error", error: "AI returned invalid JSON" })}\n\n`,
@@ -169,7 +107,14 @@ router.post("/architectures/generate", async (req, res) => {
       return;
     }
 
-    res.write(`data: ${JSON.stringify({ type: "done", result: parsed })}\n\n`);
+    // The threat model arrives as structured JSON; transport and persist it as
+    // a string like every other section so the architectures row stays all-text.
+    if (result.threatModel !== undefined && typeof result.threatModel !== "string") {
+      result.threatModel = JSON.stringify(result.threatModel);
+    }
+    result.provider = provider;
+
+    res.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
     res.end();
   } catch (err: unknown) {
     req.log.error({ err }, "Groq generation failed");

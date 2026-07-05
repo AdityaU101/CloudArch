@@ -1,10 +1,10 @@
 # Cloud Architecture Supporter
 
-An AI-powered AWS cloud architecture generator. Describe your application requirements in plain English and instantly get a complete, production-ready infrastructure design.
+An AI-powered cloud architecture generator for AWS, Azure, and Google Cloud. Describe your application requirements in plain English and instantly get a complete, production-ready infrastructure design.
 
 ## Features
 
-Given any set of requirements, the AI generates:
+Given any set of requirements and a target cloud (AWS by default), the AI generates:
 
 | Output | Description |
 |---|---|
@@ -18,6 +18,11 @@ Given any set of requirements, the AI generates:
 | **Database Recommendation** | Instance type, size, replication, and backup strategy |
 | **Monitoring Setup** | CloudWatch dashboards, alarms, and SNS alerting |
 | **Disaster Recovery Plan** | RTO/RPO targets and cross-region failover procedure |
+| **Threat Model** | STRIDE analysis, trust boundaries, attack vectors, risk matrix, and mitigations mapped to cloud-native security services |
+
+### Architecture Validator
+
+The **Validate** page audits existing infrastructure code — upload or paste Terraform, CloudFormation, or Kubernetes YAML — and returns Well-Architected scores (Security, Reliability, Cost Efficiency, Scalability, Operational Maturity) plus severity-ranked findings with concrete fixes.
 
 ## Tech Stack
 
@@ -153,11 +158,13 @@ Open **http://localhost:5173** in your browser.
 
 ## How It Works
 
-1. You describe your application requirements in the text box
+1. You describe your application requirements in the text box and pick a target cloud
 2. The frontend sends a POST request to `/api/architectures/generate`
 3. The API streams the response from Groq using Server-Sent Events (SSE)
-4. Once complete, the full architecture is displayed across 10 tabs
+4. Once complete, the full architecture is displayed across 11 tabs
 5. Save it to your library to access it later
+
+The validator works the same way: the Validate page POSTs to `/api/validations/analyze` and streams the audit over SSE.
 
 ## Environment Variables
 

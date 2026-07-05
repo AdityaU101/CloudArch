@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: architectures
     description: Cloud architecture generation and management
+  - name: validations
+    description: Infrastructure-as-code validation and scoring
 paths:
   /healthz:
     get:
@@ -172,6 +174,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /validations/analyze:
+    post:
+      operationId: validateInfrastructure
+      tags: [validations]
+      summary: Analyze infrastructure code for security, reliability, cost, scalability, and operational issues (SSE stream)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateInfrastructureInput"
+      responses:
+        "200":
+          description: SSE stream of validation analysis
+          content:
+            text/event-stream: {}
+
   /architectures/stats:
     get:
       operationId: getArchitectureStats
@@ -195,9 +214,14 @@ components:
       required:
         - status
 
+    CloudProvider:
+      type: string
+      description: Target cloud provider
+      enum: [aws, azure, gcp]
+
     Architecture:
       type: object
-      required: [id, title, requirements, diagram, terraform, costEstimate, securityRecommendations, highAvailabilityPlan, databaseRecommendation, kubernetesDeployment, cicdPipeline, monitoringSetup, disasterRecovery, createdAt, updatedAt]
+      required: [id, title, requirements, provider, diagram, terraform, costEstimate, securityRecommendations, highAvailabilityPlan, databaseRecommendation, kubernetesDeployment, cicdPipeline, monitoringSetup, disasterRecovery, threatModel, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -205,6 +229,8 @@ components:
           type: string
         requirements:
           type: string
+        provider:
+          $ref: "#/components/schemas/CloudProvider"
         diagram:
           type: string
           description: Mermaid diagram source
@@ -227,6 +253,9 @@ components:
           type: string
         disasterRecovery:
           type: string
+        threatModel:
+          type: string
+          description: STRIDE threat model as a JSON document
         createdAt:
           type: string
           format: date-time
@@ -242,6 +271,8 @@ components:
           type: string
         requirements:
           type: string
+        provider:
+          $ref: "#/components/schemas/CloudProvider"
         diagram:
           type: string
         terraform:
@@ -262,6 +293,9 @@ components:
           type: string
         disasterRecovery:
           type: string
+        threatModel:
+          type: string
+          description: STRIDE threat model as a JSON document
 
     ArchitectureUpdate:
       type: object
@@ -270,6 +304,8 @@ components:
           type: string
         requirements:
           type: string
+        provider:
+          $ref: "#/components/schemas/CloudProvider"
         diagram:
           type: string
         terraform:
@@ -289,6 +325,8 @@ components:
         monitoringSetup:
           type: string
         disasterRecovery:
+          type: string
+        threatModel:
           type: string
 
     GenerateArchitectureInput:
@@ -298,6 +336,20 @@ components:
         requirements:
           type: string
           description: Natural language description of the application requirements
+        provider:
+          $ref: "#/components/schemas/CloudProvider"
+
+    ValidateInfrastructureInput:
+      type: object
+      required: [source, format]
+      properties:
+        source:
+          type: string
+          description: Raw infrastructure code to analyze (uploaded or pasted)
+        format:
+          type: string
+          description: Infrastructure code format
+          enum: [terraform, cloudformation, kubernetes]
 
     ArchitectureStats:
       type: object

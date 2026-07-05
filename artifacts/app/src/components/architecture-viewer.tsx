@@ -4,12 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Mermaid } from "./mermaid";
 import { CodeBlock } from "./code-block";
 import { ArchitectureCanvas, useArchitectureGraph } from "./studio/architecture-canvas";
+import { ThreatModelView } from "./threat-model-view";
 import { Button } from "@/components/ui/button";
+import { providerMeta } from "@/lib/cloud-providers";
 import { Download, PenLine, GitBranch } from "lucide-react";
 
 interface ArchitectureData {
   id?: number;
   title?: string;
+  provider?: string;
   diagram?: string;
   terraform?: string;
   costEstimate?: string;
@@ -20,6 +23,7 @@ interface ArchitectureData {
   cicdPipeline?: string;
   monitoringSetup?: string;
   disasterRecovery?: string;
+  threatModel?: string;
 }
 
 interface ArchitectureViewerProps {
@@ -101,6 +105,7 @@ function ViewToggle({
 }
 
 export function ArchitectureViewer({ architecture, isDetail }: ArchitectureViewerProps) {
+  const provider = providerMeta(architecture.provider);
   return (
     <div className="space-y-6">
       <Tabs defaultValue="diagram" className="w-full">
@@ -109,6 +114,7 @@ export function ArchitectureViewer({ architecture, isDetail }: ArchitectureViewe
           <TabsTrigger value="terraform">Terraform</TabsTrigger>
           <TabsTrigger value="cost">Cost Estimate</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="threat-model">Threat Model</TabsTrigger>
           <TabsTrigger value="ha">High Availability</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>
           <TabsTrigger value="k8s">Kubernetes</TabsTrigger>
@@ -152,7 +158,7 @@ export function ArchitectureViewer({ architecture, isDetail }: ArchitectureViewe
             <Card>
               <CardHeader>
                 <CardTitle>Cost Estimate</CardTitle>
-                <CardDescription>Estimated monthly AWS infrastructure costs.</CardDescription>
+                <CardDescription>Estimated monthly {provider.name} infrastructure costs.</CardDescription>
               </CardHeader>
               <CardContent>
                 <TextSection value={architecture.costEstimate} emptyLabel="No cost estimate generated." />
@@ -170,6 +176,16 @@ export function ArchitectureViewer({ architecture, isDetail }: ArchitectureViewe
                 <TextSection value={architecture.securityRecommendations} emptyLabel="No security recommendations generated." />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="threat-model" className="m-0">
+            <div className="mb-4">
+              <h3 className="text-base font-semibold text-foreground">Threat Model</h3>
+              <p className="text-sm text-muted-foreground">
+                STRIDE analysis with mitigations mapped to {provider.name} security services.
+              </p>
+            </div>
+            <ThreatModelView threatModel={architecture.threatModel} />
           </TabsContent>
 
           <TabsContent value="ha" className="m-0">
@@ -200,7 +216,7 @@ export function ArchitectureViewer({ architecture, isDetail }: ArchitectureViewe
             <Card>
               <CardHeader>
                 <CardTitle>Kubernetes Deployment</CardTitle>
-                <CardDescription>EKS configuration and workload manifests.</CardDescription>
+                <CardDescription>Managed Kubernetes configuration and workload manifests.</CardDescription>
               </CardHeader>
               <CardContent>
                 {architecture.kubernetesDeployment ? (

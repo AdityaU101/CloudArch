@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Server, LayoutGrid, Plus, Sparkles, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Server, LayoutGrid, Plus, ShieldCheck, Sparkles, PanelLeftClose, PanelLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Generate", icon: Plus, match: (l: string) => l === "/" },
+  { href: "/validate", label: "Validate", icon: ShieldCheck, match: (l: string) => l === "/validate" },
   { href: "/architectures", label: "Library", icon: LayoutGrid, match: (l: string) => l.startsWith("/architectures") },
 ];
 
@@ -121,7 +122,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 AI Architect
               </div>
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                Describe your system in plain English and get a costed, editable AWS design.
+                Describe your system in plain English and get a costed, editable AWS, Azure, or Google Cloud design.
               </p>
             </motion.div>
           )}

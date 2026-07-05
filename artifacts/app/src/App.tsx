@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
 import Generate from "@/pages/generate";
+import Validate from "@/pages/validate";
 import Architectures from "@/pages/architectures";
 import ArchitectureDetail from "@/pages/architecture-detail";
 
@@ -14,6 +15,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Generate} />
+      <Route path="/validate" component={Validate} />
       <Route path="/architectures" component={Architectures} />
       <Route path="/architectures/:id" component={ArchitectureDetail} />
       <Route component={NotFound} />

@@ -3,12 +3,25 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { providerMeta } from "@/lib/cloud-providers";
 import { Trash2, ExternalLink, Activity, Database, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+
+function ProviderBadge({ provider }: { provider?: string }) {
+  const meta = providerMeta(provider);
+  const Icon = meta.icon;
+  return (
+    <Badge variant="outline" className="gap-1 px-1.5 py-0 font-mono text-[10px] uppercase text-muted-foreground">
+      <Icon className="h-3 w-3 text-primary" />
+      {meta.label}
+    </Badge>
+  );
+}
 
 export default function Architectures() {
   const { data: stats, isLoading: statsLoading } = useGetArchitectureStats();
@@ -91,7 +104,10 @@ export default function Architectures() {
                   <div className="flex justify-between items-start">
                     <div>
                       <CardTitle className="text-lg mb-1">{arch.title}</CardTitle>
-                      <CardDescription>{format(new Date(arch.createdAt), "MMM d, yyyy")}</CardDescription>
+                      <CardDescription className="flex items-center gap-2">
+                        {format(new Date(arch.createdAt), "MMM d, yyyy")}
+                        <ProviderBadge provider={arch.provider} />
+                      </CardDescription>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="icon" asChild>

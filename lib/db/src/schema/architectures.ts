@@ -6,6 +6,7 @@ export const architecturesTable = pgTable("architectures", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   requirements: text("requirements").notNull(),
+  provider: text("provider").notNull().default("aws"),
   diagram: text("diagram").notNull(),
   terraform: text("terraform").notNull(),
   costEstimate: text("cost_estimate").notNull(),
@@ -16,6 +17,7 @@ export const architecturesTable = pgTable("architectures", {
   cicdPipeline: text("cicd_pipeline").notNull(),
   monitoringSetup: text("monitoring_setup").notNull(),
   disasterRecovery: text("disaster_recovery").notNull(),
+  threatModel: text("threat_model").notNull().default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

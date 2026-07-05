@@ -8,6 +8,9 @@ import { ArchitectureViewer } from "@/components/architecture-viewer";
 import { useSaveArchitecture, getListArchitecturesQueryKey, getGetArchitectureStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { streamJsonEvents } from "@/lib/sse-stream";
+import { CLOUD_PROVIDERS, providerMeta, type CloudProvider } from "@/lib/cloud-providers";
+import { cn } from "@/lib/utils";
 import { Server, Loader2, Save, Sparkles, Wand2 } from "lucide-react";
 
 const EXAMPLES = [
@@ -18,10 +21,11 @@ const EXAMPLES = [
 
 export default function Generate() {
   const [requirements, setRequirements] = useState("");
+  const [provider, setProvider] = useState<CloudProvider>("aws");
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [result, setResult] = useState<any | null>(null);
-  
+
   const saveMutation = useSaveArchitecture();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -35,69 +39,20 @@ export default function Generate() {
     setResult(null);
     
     try {
-      const response = await fetch("/api/architectures/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirements }),
-      });
-      
-      if (!response.ok || !response.body) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      const handleEvent = (raw: string) => {
-        // An SSE record may contain multiple "data:" lines; concatenate them.
-        const dataPayload = raw
-          .split("\n")
-          .filter((l) => l.startsWith("data:"))
-          .map((l) => l.slice(l.indexOf(":") + 1).replace(/^ /, ""))
-          .join("\n");
-        if (!dataPayload) return;
-
-        let event: any;
-        try {
-          event = JSON.parse(dataPayload);
-        } catch {
-          // A genuinely incomplete/invalid record — skip it.
-          return;
-        }
-
-        if (event.type === "chunk") {
-          setStreamText((prev) => prev + (event.content ?? ""));
-        } else if (event.type === "done") {
-          setResult(event.result);
-        } else if (event.type === "error") {
-          toast({
-            title: "Generation Failed",
-            description: event.error,
-            variant: "destructive",
-          });
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        // Decode incrementally so multi-byte UTF-8 split across reads isn't corrupted.
-        buffer += decoder.decode(value, { stream: !done });
-
-        // Process every complete SSE record (records are separated by a blank line).
-        let sep: number;
-        while ((sep = buffer.indexOf("\n\n")) !== -1) {
-          const record = buffer.slice(0, sep);
-          buffer = buffer.slice(sep + 2);
-          if (record.trim()) handleEvent(record);
-        }
-
-        if (done) {
-          // Flush any trailing record that wasn't newline-terminated.
-          if (buffer.trim()) handleEvent(buffer);
-          break;
-        }
-      }
+      await streamJsonEvents<any>(
+        "/api/architectures/generate",
+        { requirements, provider },
+        {
+          onChunk: (content) => setStreamText((prev) => prev + content),
+          onDone: (result) => setResult(result),
+          onError: (error) =>
+            toast({
+              title: "Generation Failed",
+              description: error,
+              variant: "destructive",
+            }),
+        },
+      );
     } catch (error) {
       toast({
         title: "Generation Error",
@@ -152,7 +107,7 @@ export default function Generate() {
         </div>
         <h1 className="text-3xl font-bold tracking-tight">Design your cloud architecture</h1>
         <p className="max-w-2xl text-muted-foreground">
-          Describe your application in plain English. Get a costed, editable AWS design with security, scaling, and disaster-recovery guidance.
+          Describe your application in plain English. Get a costed, editable {providerMeta(provider).name} design with security, scaling, and disaster-recovery guidance.
         </p>
       </motion.div>
 
@@ -165,6 +120,29 @@ export default function Generate() {
           <CardDescription>Include scale, traffic, data, security, and compliance needs for the best result.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-medium text-muted-foreground">Target cloud</span>
+            <div className="inline-flex items-center rounded-lg border border-border bg-muted/50 p-0.5">
+              {CLOUD_PROVIDERS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setProvider(id)}
+                  disabled={isGenerating}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    provider === id
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className={cn("h-3.5 w-3.5", provider === id && "text-primary")} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <Textarea
             placeholder="e.g. A multi-tenant SaaS application that processes 10,000 video uploads per day. We need high availability, auto-scaling, and a PostgreSQL database. Must comply with SOC2."
             className="min-h-[150px] resize-none bg-background/60 font-mono text-sm"
