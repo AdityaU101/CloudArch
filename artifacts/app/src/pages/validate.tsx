@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SeverityBadge } from "@/components/threat-model-view";
 import { streamJsonEvents } from "@/lib/sse-stream";
+import { scanContent, redactContent, type SecretFinding } from "@workspace/secret-scan";
+import { SecretWarningDialog } from "@/components/secret-warning-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -147,6 +149,7 @@ export default function Validate() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [result, setResult] = useState<ValidationResult | null>(null);
+  const [scanFindings, setScanFindings] = useState<SecretFinding[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -157,8 +160,19 @@ export default function Validate() {
     setFormat(detectFormat(file.name, text));
   };
 
-  const handleAnalyze = async () => {
-    if (!source.trim()) return;
+  const handleAnalyze = async (text?: string) => {
+    const body = text ?? source;
+    if (!body.trim()) return;
+
+    // Hardcoded secrets in IaC are exactly what this page audits, so warn —
+    // but leave the choice to the user (finding them may be the point).
+    if (text === undefined) {
+      const findings = scanContent(body, "source");
+      if (findings.length > 0) {
+        setScanFindings(findings);
+        return;
+      }
+    }
 
     setIsAnalyzing(true);
     setStreamText("");
@@ -167,7 +181,7 @@ export default function Validate() {
     try {
       await streamJsonEvents<ValidationResult>(
         "/api/validations/analyze",
-        { source, format },
+        { source: body, format },
         {
           onChunk: (content) => setStreamText((prev) => prev + content),
           onDone: (result) => setResult(result),
@@ -192,6 +206,23 @@ export default function Validate() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-8">
+      <SecretWarningDialog
+        open={scanFindings !== null}
+        findings={scanFindings ?? []}
+        actionLabel="sending this code for analysis"
+        onCancel={() => setScanFindings(null)}
+        onRedact={() => {
+          if (!scanFindings) return;
+          const redacted = redactContent(source, scanFindings);
+          setSource(redacted);
+          setScanFindings(null);
+          handleAnalyze(redacted);
+        }}
+        onProceed={() => {
+          setScanFindings(null);
+          handleAnalyze(source);
+        }}
+      />
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -261,7 +292,7 @@ export default function Validate() {
             }}
           />
 
-          <Button onClick={handleAnalyze} disabled={isAnalyzing || !source.trim()} className="w-full gap-2 sm:w-auto">
+          <Button onClick={() => handleAnalyze()} disabled={isAnalyzing || !source.trim()} className="w-full gap-2 sm:w-auto">
             {isAnalyzing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />

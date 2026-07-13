@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { specFor, CATEGORIES } from "@/lib/aws-catalog";
+import { specFor, CATEGORIES } from "@/lib/cloud-catalog";
+import { useStudioProvider } from "./provider-context";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   type: string;
@@ -14,7 +15,8 @@ export interface ServiceNodeData extends Record<string, unknown> {
  */
 export const ServiceNode = memo(function ServiceNode({ data, selected }: NodeProps) {
   const d = data as ServiceNodeData;
-  const spec = specFor(d.type);
+  const provider = useStudioProvider();
+  const spec = specFor(d.type, provider);
   const cat = spec ? CATEGORIES[spec.category] : undefined;
   const hue = cat?.hue ?? "190 12% 60%";
   const Icon = spec?.icon;

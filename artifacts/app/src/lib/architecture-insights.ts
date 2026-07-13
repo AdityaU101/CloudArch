@@ -1,4 +1,5 @@
-import { specFor, type CapabilityTag, type ComponentSpec } from "./aws-catalog";
+import { specFor, type CapabilityTag, type ResolvedSpec } from "./cloud-catalog";
+import type { CloudProvider } from "./cloud-providers";
 
 export type Severity = "good" | "warn" | "risk" | "tip";
 
@@ -25,17 +26,66 @@ export interface Insights {
 }
 
 /** The set of components currently on the canvas, resolved to their specs. */
-function resolveSpecs(types: string[]): ComponentSpec[] {
-  return types.map(specFor).filter((s): s is ComponentSpec => Boolean(s));
+function resolveSpecs(types: string[], provider: CloudProvider): ResolvedSpec[] {
+  return types.map((t) => specFor(t, provider)).filter((s): s is ResolvedSpec => Boolean(s));
 }
 
-function has(specs: ComponentSpec[], tag: CapabilityTag): boolean {
+function has(specs: ResolvedSpec[], tag: CapabilityTag): boolean {
   return specs.some((s) => s.tags.includes(tag));
 }
 
-function count(specs: ComponentSpec[], tag: CapabilityTag): number {
+function count(specs: ResolvedSpec[], tag: CapabilityTag): number {
   return specs.filter((s) => s.tags.includes(tag)).length;
 }
+
+/** Provider-specific service names used in tradeoff copy. */
+interface ProviderVoice {
+  vendor: string;
+  entry: string;
+  haDb: string;
+  backup: string;
+  cache: string;
+  cdnDetail: string;
+  waf: string;
+  monitor: string;
+  zones: string;
+}
+
+const VOICES: Record<CloudProvider, ProviderVoice> = {
+  aws: {
+    vendor: "AWS",
+    entry: "an Application Load Balancer or API Gateway",
+    haDb: "Aurora or a Multi-AZ RDS deployment",
+    backup: "AWS Backup",
+    cache: "ElastiCache",
+    cdnDetail: "CloudFront caches S3 content at the edge",
+    waf: "AWS WAF",
+    monitor: "CloudWatch",
+    zones: "Availability Zones",
+  },
+  azure: {
+    vendor: "Azure",
+    entry: "an Application Gateway or API Management front end",
+    haDb: "Azure SQL Business Critical or zone-redundant PostgreSQL",
+    backup: "Azure Backup",
+    cache: "Azure Cache for Redis",
+    cdnDetail: "Azure Front Door caches Blob Storage content at the edge",
+    waf: "Azure WAF",
+    monitor: "Azure Monitor",
+    zones: "Availability Zones",
+  },
+  gcp: {
+    vendor: "Google Cloud",
+    entry: "Cloud Load Balancing or API Gateway",
+    haDb: "AlloyDB or a regional (HA) Cloud SQL instance",
+    backup: "Backup and DR",
+    cache: "Memorystore",
+    cdnDetail: "Cloud CDN caches Cloud Storage content at the edge",
+    waf: "Cloud Armor",
+    monitor: "Cloud Monitoring",
+    zones: "zones",
+  },
+};
 
 function clamp(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -45,8 +95,9 @@ function clamp(n: number): number {
  * Derive cost, resilience scores, and human-readable tradeoffs from the set of
  * components on the canvas. Pure and cheap — safe to run on every edit.
  */
-export function computeInsights(types: string[]): Insights {
-  const specs = resolveSpecs(types);
+export function computeInsights(types: string[], provider: CloudProvider = "aws"): Insights {
+  const specs = resolveSpecs(types, provider);
+  const voice = VOICES[provider];
   const monthly = specs.reduce((sum, s) => sum + s.monthly, 0);
 
   // --- cost by category ---
@@ -99,7 +150,7 @@ export function computeInsights(types: string[]): Insights {
       id: "no-entrypoint",
       severity: "risk",
       title: "No load balancer in front of compute",
-      detail: "Traffic hits a single instance directly. Add an Application Load Balancer or API Gateway to remove the single point of failure.",
+      detail: `Traffic hits a single instance directly. Add ${voice.entry} to remove the single point of failure.`,
     });
   }
   if (hasStateful && !has(specs, "managed-ha") && !has(specs, "backup")) {
@@ -107,7 +158,7 @@ export function computeInsights(types: string[]): Insights {
       id: "db-spof",
       severity: "risk",
       title: "Database has no redundancy or backups",
-      detail: "A single database is a data-loss risk. Switch to Aurora / Multi-AZ, or add AWS Backup for recovery.",
+      detail: `A single database is a data-loss risk. Switch to ${voice.haDb}, or add ${voice.backup} for recovery.`,
     });
   }
   if (hasStateful && !has(specs, "cache")) {
@@ -115,7 +166,7 @@ export function computeInsights(types: string[]): Insights {
       id: "no-cache",
       severity: "tip",
       title: "Add a cache to relieve the database",
-      detail: "ElastiCache in front of your database cuts read latency and lets you scale reads cheaply.",
+      detail: `${voice.cache} in front of your database cuts read latency and lets you scale reads cheaply.`,
     });
   }
   if (has(specs, "object-store") && !has(specs, "cdn")) {
@@ -123,7 +174,7 @@ export function computeInsights(types: string[]): Insights {
       id: "no-cdn",
       severity: "tip",
       title: "Serve static assets through a CDN",
-      detail: "CloudFront caches S3 content at the edge, lowering latency and egress cost.",
+      detail: `${voice.cdnDetail}, lowering latency and egress cost.`,
     });
   }
   if (hasEntry && !has(specs, "waf")) {
@@ -131,7 +182,7 @@ export function computeInsights(types: string[]): Insights {
       id: "no-waf",
       severity: "warn",
       title: "Public entry point is unprotected",
-      detail: "Add WAF to filter common web exploits before they reach your application.",
+      detail: `Add ${voice.waf} to filter common web exploits before they reach your application.`,
     });
   }
   if (specs.length > 0 && !has(specs, "observability")) {
@@ -139,7 +190,7 @@ export function computeInsights(types: string[]): Insights {
       id: "no-observability",
       severity: "warn",
       title: "No monitoring configured",
-      detail: "Add CloudWatch so you can see metrics, logs, and get alerted before users do.",
+      detail: `Add ${voice.monitor} so you can see metrics, logs, and get alerted before users do.`,
     });
   }
   if (has(specs, "serverless")) {
@@ -154,8 +205,8 @@ export function computeInsights(types: string[]): Insights {
     add({
       id: "managed-good",
       severity: "good",
-      title: "Managed multi-AZ services in play",
-      detail: "AWS handles failover across availability zones for these components.",
+      title: "Managed highly-available services in play",
+      detail: `${voice.vendor} handles failover across ${voice.zones} for these components.`,
     });
   }
 
@@ -166,13 +217,13 @@ export function computeInsights(types: string[]): Insights {
   return { monthly, count: specs.length, scores, tradeoffs: t, costByCategory };
 }
 
-function catMeta(s: ComponentSpec): { label: string; hue: string } {
+function catMeta(s: ResolvedSpec): { label: string; hue: string } {
   // Local import avoidance: map category id → label/hue via the catalog module.
   const meta = CATEGORY_META[s.category];
   return meta;
 }
 
-// Mirror of CATEGORIES to avoid a circular import surface; kept in sync with aws-catalog.
+// Mirror of CATEGORIES to avoid a circular import surface; kept in sync with cloud-catalog.
 const CATEGORY_META: Record<string, { label: string; hue: string }> = {
   compute: { label: "Compute", hue: "36 100% 50%" },
   database: { label: "Database", hue: "200 90% 48%" },

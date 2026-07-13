@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { CATALOG, CATEGORIES, type CategoryId } from "@/lib/aws-catalog";
+import { resolveCatalog, CATEGORIES, type CategoryId } from "@/lib/cloud-catalog";
+import { useStudioProvider } from "./provider-context";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
@@ -16,16 +17,18 @@ const CATEGORY_ORDER: CategoryId[] = ["compute", "network", "database", "storage
  */
 export function ComponentPalette({ onAdd }: ComponentPaletteProps) {
   const [query, setQuery] = useState("");
+  const provider = useStudioProvider();
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const catalog = resolveCatalog(provider);
     return CATEGORY_ORDER.map((catId) => ({
       cat: CATEGORIES[catId],
-      items: CATALOG.filter(
+      items: catalog.filter(
         (c) => c.category === catId && (!q || c.label.toLowerCase().includes(q) || c.blurb.toLowerCase().includes(q)),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [query]);
+  }, [query, provider]);
 
   return (
     <div className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-card/40">

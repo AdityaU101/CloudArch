@@ -30,7 +30,9 @@ import { ServiceNode, type ServiceNodeData } from "./service-node";
 import { ComponentPalette } from "./component-palette";
 import { InsightsPanel } from "./insights-panel";
 import { computeInsights } from "@/lib/architecture-insights";
-import { specFor, CATEGORIES } from "@/lib/aws-catalog";
+import { specFor, CATEGORIES } from "@/lib/cloud-catalog";
+import type { CloudProvider } from "@/lib/cloud-providers";
+import { StudioProviderContext } from "./provider-context";
 import { mermaidToGraph } from "@/lib/mermaid-to-graph";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -100,8 +102,8 @@ const defaultEdgeOptions = {
 let seq = 0;
 const nextId = () => `n${Date.now().toString(36)}${(seq++).toString(36)}`;
 
-function seedToGraph(mermaid?: string): { nodes: Node[]; edges: Edge[] } {
-  const g = mermaidToGraph(mermaid ?? "");
+function seedToGraph(mermaid?: string, provider: CloudProvider = "aws"): { nodes: Node[]; edges: Edge[] } {
+  const g = mermaidToGraph(mermaid ?? "", provider);
   return {
     nodes: g.nodes.map((n) => ({
       id: n.id,
@@ -129,8 +131,8 @@ export interface ArchitectureGraph {
  * survives switching between the Studio and Blueprint views. Reseeds only when
  * a new architecture is generated (the Mermaid source changes).
  */
-export function useArchitectureGraph(seedMermaid?: string): ArchitectureGraph {
-  const seed = useMemo(() => seedToGraph(seedMermaid), [seedMermaid]);
+export function useArchitectureGraph(seedMermaid?: string, provider: CloudProvider = "aws"): ArchitectureGraph {
+  const seed = useMemo(() => seedToGraph(seedMermaid, provider), [seedMermaid, provider]);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(seed.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(seed.edges);
   const firstRun = useRef(true);
@@ -150,12 +152,14 @@ export function useArchitectureGraph(seedMermaid?: string): ArchitectureGraph {
 
 interface CanvasProps {
   graph: ArchitectureGraph;
+  /** Which cloud the design targets; drives service names and pricing. */
+  provider?: CloudProvider;
   height?: number;
 }
 
 const fitOptions = { padding: 0.18, maxZoom: 1.15, minZoom: 0.4 };
 
-function CanvasInner({ graph, height = 720 }: CanvasProps) {
+function CanvasInner({ graph, provider = "aws", height = 720 }: CanvasProps) {
   const { seed, nodes, edges, onNodesChange, onEdgesChange, setNodes, setEdges } = graph;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -169,7 +173,7 @@ function CanvasInner({ graph, height = 720 }: CanvasProps) {
   }, [seed, fitView]);
 
   const types = useMemo(() => nodes.map((n) => (n.data as ServiceNodeData).type), [nodes]);
-  const insights = useMemo(() => computeInsights(types), [types]);
+  const insights = useMemo(() => computeInsights(types, provider), [types, provider]);
 
   const onConnect = useCallback((c: Connection) => setEdges((eds) => addEdge(c, eds)), [setEdges]);
 
@@ -177,7 +181,7 @@ function CanvasInner({ graph, height = 720 }: CanvasProps) {
 
   const placeNode = useCallback(
     (type: string, position: { x: number; y: number }) => {
-      const spec = specFor(type);
+      const spec = specFor(type, provider);
       const node: Node = {
         id: nextId(),
         type: "service",
@@ -186,7 +190,7 @@ function CanvasInner({ graph, height = 720 }: CanvasProps) {
       };
       setNodes((nds) => nds.concat(node));
     },
-    [setNodes],
+    [setNodes, provider],
   );
 
   const addToCenter = useCallback(
@@ -337,8 +341,10 @@ function CanvasInner({ graph, height = 720 }: CanvasProps) {
  */
 export function ArchitectureCanvas(props: CanvasProps) {
   return (
-    <ReactFlowProvider>
-      <CanvasInner {...props} />
-    </ReactFlowProvider>
+    <StudioProviderContext.Provider value={props.provider ?? "aws"}>
+      <ReactFlowProvider>
+        <CanvasInner {...props} />
+      </ReactFlowProvider>
+    </StudioProviderContext.Provider>
   );
 }

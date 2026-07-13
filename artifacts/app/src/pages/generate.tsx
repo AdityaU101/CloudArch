@@ -10,6 +10,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { streamJsonEvents } from "@/lib/sse-stream";
 import { CLOUD_PROVIDERS, providerMeta, type CloudProvider } from "@/lib/cloud-providers";
+import { scanContent, scanFields, redactContent, redactFields, type SecretFinding } from "@workspace/secret-scan";
+import { SecretWarningDialog } from "@/components/secret-warning-dialog";
 import { cn } from "@/lib/utils";
 import { Server, Loader2, Save, Sparkles, Wand2 } from "lucide-react";
 
@@ -25,15 +27,26 @@ export default function Generate() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [result, setResult] = useState<any | null>(null);
+  const [scanState, setScanState] = useState<{ findings: SecretFinding[]; action: "generate" | "save" } | null>(null);
 
   const saveMutation = useSaveArchitecture();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const handleGenerate = async () => {
-    if (!requirements.trim()) return;
-    
+  const handleGenerate = async (text?: string) => {
+    const reqs = text ?? requirements;
+    if (!reqs.trim()) return;
+
+    // Local scan before anything leaves the browser.
+    if (text === undefined) {
+      const findings = scanContent(reqs, "requirements");
+      if (findings.length > 0) {
+        setScanState({ findings, action: "generate" });
+        return;
+      }
+    }
+
     setIsGenerating(true);
     setStreamText("");
     setResult(null);
@@ -41,7 +54,7 @@ export default function Generate() {
     try {
       await streamJsonEvents<any>(
         "/api/architectures/generate",
-        { requirements, provider },
+        { requirements: reqs, provider },
         {
           onChunk: (content) => setStreamText((prev) => prev + content),
           onDone: (result) => setResult(result),
@@ -64,14 +77,38 @@ export default function Generate() {
     }
   };
 
-  const handleSave = () => {
-    if (!result) return;
-    
+  const handleSave = (payload?: Record<string, any>) => {
+    if (!result && !payload) return;
+
+    const base = payload ?? { ...result, requirements };
+
+    // Scan everything that would be persisted (only on the unscanned path).
+    if (!payload) {
+      const findings = scanFields({
+        requirements: base.requirements,
+        diagram: base.diagram,
+        terraform: base.terraform,
+        costEstimate: base.costEstimate,
+        securityRecommendations: base.securityRecommendations,
+        highAvailabilityPlan: base.highAvailabilityPlan,
+        databaseRecommendation: base.databaseRecommendation,
+        kubernetesDeployment: base.kubernetesDeployment,
+        cicdPipeline: base.cicdPipeline,
+        monitoringSetup: base.monitoringSetup,
+        disasterRecovery: base.disasterRecovery,
+        threatModel: base.threatModel,
+      });
+      if (findings.length > 0) {
+        setScanState({ findings, action: "save" });
+        return;
+      }
+    }
+
     // Add title derived from requirements if not present
-    const title = result.title || requirements.split(" ").slice(0, 5).join(" ") + "...";
-    
+    const title = base.title || requirements.split(" ").slice(0, 5).join(" ") + "...";
+
     saveMutation.mutate(
-      { data: { ...result, title, requirements } },
+      { data: { ...base, title } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListArchitecturesQueryKey() });
@@ -93,8 +130,37 @@ export default function Generate() {
     );
   };
 
+  const resolveScan = (mode: "redact" | "proceed") => {
+    if (!scanState) return;
+    const { findings, action } = scanState;
+    setScanState(null);
+
+    if (action === "generate") {
+      const text = mode === "redact" ? redactContent(requirements, findings) : requirements;
+      if (mode === "redact") setRequirements(text);
+      handleGenerate(text);
+    } else {
+      const base = { ...result, requirements };
+      const payload = mode === "redact" ? redactFields(base, findings) : base;
+      if (mode === "redact") {
+        const { requirements: redactedReqs, ...redactedResult } = payload;
+        setResult(redactedResult);
+        setRequirements(redactedReqs ?? requirements);
+      }
+      handleSave(payload);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-8">
+      <SecretWarningDialog
+        open={scanState !== null}
+        findings={scanState?.findings ?? []}
+        actionLabel={scanState?.action === "save" ? "saving to your library" : "sending to the AI architect"}
+        onCancel={() => setScanState(null)}
+        onRedact={() => resolveScan("redact")}
+        onProceed={() => resolveScan("proceed")}
+      />
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -166,7 +232,7 @@ export default function Generate() {
             </div>
           )}
 
-          <Button onClick={handleGenerate} disabled={isGenerating || !requirements.trim()} className="w-full gap-2 sm:w-auto">
+          <Button onClick={() => handleGenerate()} disabled={isGenerating || !requirements.trim()} className="w-full gap-2 sm:w-auto">
             {isGenerating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -220,7 +286,7 @@ export default function Generate() {
           >
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold tracking-tight">Generated design</h2>
-              <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
+              <Button onClick={() => handleSave()} disabled={saveMutation.isPending} className="gap-2">
                 {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save architecture
               </Button>

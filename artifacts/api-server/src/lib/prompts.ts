@@ -188,6 +188,87 @@ ${p.diagramExample}
 Be specific and thorough. Use real ${p.name} service names, real instance types, real pricing. Make the Terraform and Kubernetes manifests actually deployable.`;
 }
 
+/** Per-section generation specs, mirroring the fields of the full prompt. */
+export type SectionKey =
+  | "diagram"
+  | "terraform"
+  | "costEstimate"
+  | "securityRecommendations"
+  | "highAvailabilityPlan"
+  | "databaseRecommendation"
+  | "kubernetesDeployment"
+  | "cicdPipeline"
+  | "monitoringSetup"
+  | "disasterRecovery"
+  | "threatModel";
+
+function sectionSpec(section: SectionKey, p: ProviderProfile): string {
+  switch (section) {
+    case "diagram":
+      return `A complete Mermaid diagram showing all ${p.name} services and their connections`;
+    case "terraform":
+      return `Complete Terraform HCL code with provider config, all resources, variables, and outputs. ${p.terraform}`;
+    case "costEstimate":
+      return "Detailed monthly cost breakdown per service with total estimate";
+    case "securityRecommendations":
+      return `Numbered list of security best practices and specific ${p.name} security services to use (${p.securityServices})`;
+    case "highAvailabilityPlan":
+      return "Multi-zone / multi-region strategy, load balancing, auto-scaling details";
+    case "databaseRecommendation":
+      return "Specific database service recommendation with instance type, size, backup strategy";
+    case "kubernetesDeployment":
+      return `Complete Kubernetes YAML manifests (Deployment, Service, HPA, Ingress). ${p.kubernetes}`;
+    case "cicdPipeline":
+      return `CI/CD pipeline definition using GitHub Actions or the native ${p.name} pipeline service`;
+    case "monitoringSetup":
+      return p.monitoring;
+    case "disasterRecovery":
+      return "RTO/RPO targets, backup strategy, cross-region failover procedure";
+    case "threatModel":
+      return ""; // handled specially below — structured JSON
+  }
+}
+
+const clip = (text: string, max = 6000): string =>
+  text.length > max ? `${text.slice(0, max)}\n…(truncated)` : text;
+
+/**
+ * System prompt for regenerating exactly one section of an existing
+ * architecture, holding the rest of the design constant.
+ */
+export function buildSectionRegenerationPrompt(
+  provider: CloudProvider,
+  section: SectionKey,
+  context: { requirements: string; diagram: string; current: string; instructions?: string },
+): string {
+  const p = PROFILES[provider];
+  const valueSpec =
+    section === "threatModel"
+      ? THREAT_MODEL_SPEC
+      : `"${sectionSpec(section, p)}"`;
+
+  const diagramRules =
+    section === "diagram"
+      ? `\nThe diagram MUST follow these rules exactly: start with "graph TD"; alphanumeric node IDs; NEVER use quotes anywhere in the diagram; cylinders [( )] for databases, diamonds { } for decisions; subgraphs for network boundaries; and include the standard classDef color block. Example of the expected style:\n${p.diagramExample}\n`
+      : "";
+
+  return `You are ${p.persona}. An existing ${p.name} architecture has already been designed. Your job is to regenerate ONLY its "${section}" section — improved, current, and fully consistent with the rest of the design. Do not redesign other parts of the architecture.
+
+Original requirements:
+${clip(context.requirements, 3000)}
+
+Current architecture diagram (for context — keep the regenerated section consistent with it):
+${clip(context.diagram, 4000)}
+
+Current content of the "${section}" section (replace this with a better version):
+${clip(context.current)}
+${context.instructions ? `\nAdditional instructions from the user: ${clip(context.instructions, 1000)}\n` : ""}${diagramRules}
+You MUST respond with a JSON object containing EXACTLY one field:
+{
+  "${section}": ${valueSpec}
+}`;
+}
+
 const FORMAT_LABELS: Record<string, string> = {
   terraform: "Terraform HCL",
   cloudformation: "AWS CloudFormation (JSON or YAML)",

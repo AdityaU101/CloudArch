@@ -1,9 +1,13 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const architecturesTable = pgTable("architectures", {
   id: serial("id").primaryKey(),
+  // Nullable so rows saved before auth existed keep working; ownerless rows
+  // are simply invisible in the per-user library.
+  userId: integer("user_id"),
+  workspaceId: integer("workspace_id"),
   title: text("title").notNull(),
   requirements: text("requirements").notNull(),
   provider: text("provider").notNull().default("aws"),

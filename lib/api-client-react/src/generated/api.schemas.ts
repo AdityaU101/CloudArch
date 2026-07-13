@@ -21,6 +21,89 @@ export const CloudProvider = {
   gcp: 'gcp',
 } as const;
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  /** The user's personal workspace */
+  workspaceId: number;
+}
+
+export interface RegisterInput {
+  /** @minLength 3 */
+  email: string;
+  /** @minLength 8 */
+  password: string;
+  /** @minLength 1 */
+  name: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+/**
+ * A regenerable content section of an architecture
+ */
+export type ArchitectureSection = typeof ArchitectureSection[keyof typeof ArchitectureSection];
+
+
+export const ArchitectureSection = {
+  diagram: 'diagram',
+  terraform: 'terraform',
+  costEstimate: 'costEstimate',
+  securityRecommendations: 'securityRecommendations',
+  highAvailabilityPlan: 'highAvailabilityPlan',
+  databaseRecommendation: 'databaseRecommendation',
+  kubernetesDeployment: 'kubernetesDeployment',
+  cicdPipeline: 'cicdPipeline',
+  monitoringSetup: 'monitoringSetup',
+  disasterRecovery: 'disasterRecovery',
+  threatModel: 'threatModel',
+} as const;
+
+export interface RegenerateSectionInput {
+  section: ArchitectureSection;
+  /** Optional extra guidance for the regeneration */
+  instructions?: string;
+}
+
+export interface ArchitectureVersionSummary {
+  id: number;
+  architectureId: number;
+  versionNumber: number;
+  reason: string;
+  changedFields: string[];
+  /** @nullable */
+  editorName: string | null;
+  createdAt: string;
+}
+
+/**
+ * Content fields as they were before the change
+ */
+export type ArchitectureVersionSnapshot = {[key: string]: string};
+
+export type ArchitectureVersion = ArchitectureVersionSummary & {
+  /** Content fields as they were before the change */
+  snapshot: ArchitectureVersionSnapshot;
+};
+
+export type AuditLogEntryMetadata = { [key: string]: unknown };
+
+export interface AuditLogEntry {
+  id: number;
+  actionType: string;
+  entityType: string;
+  /** @nullable */
+  entityId: number | null;
+  metadata: AuditLogEntryMetadata;
+  /** @nullable */
+  userName: string | null;
+  createdAt: string;
+}
+
 export interface Architecture {
   id: number;
   title: string;
@@ -115,4 +198,12 @@ export interface ArchitectureStats {
 export interface ApiError {
   error: string;
 }
+
+export type ListAuditLogsParams = {
+/**
+ * Limit results to one architecture
+ */
+architectureId?: number;
+limit?: number;
+};
 

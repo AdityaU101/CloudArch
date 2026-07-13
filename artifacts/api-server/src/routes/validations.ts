@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { ValidateInfrastructureBody } from "@workspace/api-zod";
-import { groq, GROQ_MODEL } from "../lib/groq";
+import { streamJsonCompletion } from "../lib/llm";
 import { buildValidationSystemPrompt, validationFormatLabel } from "../lib/prompts";
+import { logAudit } from "../lib/audit";
 
 const router = Router();
 
@@ -29,8 +30,7 @@ router.post("/validations/analyze", async (req, res) => {
   const body = truncated ? source.slice(0, MAX_SOURCE_CHARS) : source;
 
   try {
-    const stream = await groq.chat.completions.create({
-      model: GROQ_MODEL,
+    const stream = streamJsonCompletion({
       messages: [
         { role: "system", content: buildValidationSystemPrompt(format) },
         {
@@ -38,19 +38,13 @@ router.post("/validations/analyze", async (req, res) => {
           content: `Analyze the following ${validationFormatLabel(format)}${truncated ? " (truncated to the first 60,000 characters)" : ""}:\n\n${body}`,
         },
       ],
-      stream: true,
-      max_tokens: 8192,
-      response_format: { type: "json_object" },
     });
 
     let fullResponse = "";
 
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        fullResponse += content;
-        res.write(`data: ${JSON.stringify({ type: "chunk", content })}\n\n`);
-      }
+    for await (const content of stream) {
+      fullResponse += content;
+      res.write(`data: ${JSON.stringify({ type: "chunk", content })}\n\n`);
     }
 
     let result: Record<string, unknown>;
@@ -63,6 +57,12 @@ router.post("/validations/analyze", async (req, res) => {
       res.end();
       return;
     }
+
+    logAudit(req, {
+      actionType: "validation.run",
+      entityType: "validation",
+      metadata: { format, sourceChars: source.length },
+    });
 
     res.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
     res.end();

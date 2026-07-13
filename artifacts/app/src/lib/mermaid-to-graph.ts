@@ -1,4 +1,5 @@
-import { CATALOG } from "./aws-catalog";
+import { specFor } from "./cloud-catalog";
+import type { CloudProvider } from "./cloud-providers";
 
 export interface SeedNode {
   id: string;
@@ -16,31 +17,35 @@ export interface SeedGraph {
   edges: SeedEdge[];
 }
 
-/** Keyword table to map a diagram label onto a catalog component type. */
+/**
+ * Keyword table to map a diagram label onto a catalog component type. Covers
+ * the AWS, Azure, and GCP names for each component so diagrams generated for
+ * any provider land on the right building block.
+ */
 const KEYWORDS: [RegExp, string][] = [
-  [/cloud ?front|\bcdn\b|edge/i, "cloudfront"],
-  [/route ?53|\bdns\b/i, "route53"],
-  [/api ?gateway|\bapi gw\b/i, "apigw"],
-  [/load ?balancer|\balb\b|\belb\b|\bnlb\b/i, "alb"],
-  [/\bwaf\b|firewall/i, "waf"],
-  [/lambda|function/i, "lambda"],
-  [/\beks\b|kubernetes|k8s/i, "eks"],
-  [/\becs\b|fargate|container/i, "ecs"],
-  [/auto ?scal/i, "asg"],
-  [/aurora/i, "aurora"],
-  [/dynamo/i, "dynamodb"],
-  [/elasticache|redis|memcached|\bcache\b/i, "elasticache"],
-  [/\brds\b|postgres|mysql|relational|database|\bdb\b/i, "rds"],
-  [/\bs3\b|bucket|object stor/i, "s3"],
-  [/\bebs\b|block stor|volume/i, "ebs"],
+  [/cloud ?front|front ?door|cloud ?cdn|\bcdn\b|edge/i, "cloudfront"],
+  [/route ?53|cloud dns|azure dns|\bdns\b/i, "route53"],
+  [/api ?gateway|api ?management|\bapim\b|\bapi gw\b/i, "apigw"],
+  [/load ?balanc|application gateway|app gateway|\balb\b|\belb\b|\bnlb\b/i, "alb"],
+  [/\bwaf\b|cloud armor|firewall/i, "waf"],
+  [/\beks\b|\baks\b|\bgke\b|kubernetes|k8s/i, "eks"],
+  [/\becs\b|fargate|cloud run|container/i, "ecs"],
+  [/lambda|cloud functions?|azure functions?|function/i, "lambda"],
+  [/auto ?scal|scale set|instance group/i, "asg"],
+  [/aurora|alloydb|spanner|business critical|hyperscale/i, "aurora"],
+  [/dynamo|cosmos|firestore|bigtable/i, "dynamodb"],
+  [/elasticache|memorystore|redis|memcached|\bcache\b/i, "elasticache"],
+  [/\brds\b|cloud sql|azure sql|postgres|mysql|relational|database|\bdb\b/i, "rds"],
+  [/\bs3\b|blob|cloud storage|bucket|object stor/i, "s3"],
+  [/\bebs\b|managed disk|persistent disk|block stor|volume/i, "ebs"],
   [/backup/i, "backup"],
-  [/cognito|auth|identity/i, "cognito"],
-  [/secrets? ?manager/i, "secrets"],
+  [/cognito|entra|ad b2c|identity platform|auth|identity/i, "cognito"],
+  [/secrets? ?manager|key ?vault/i, "secrets"],
   [/\bkms\b|encrypt/i, "kms"],
-  [/\bsqs\b|queue/i, "sqs"],
-  [/cloud ?watch|monitor|logging|metric/i, "cloudwatch"],
-  [/\bvpc\b|subnet|network/i, "vpc"],
-  [/\bec2\b|instance|server|compute|web ?server|app ?server/i, "ec2"],
+  [/\bsqs\b|service bus|pub\/?sub|queue/i, "sqs"],
+  [/cloud ?watch|azure monitor|cloud monitoring|stackdriver|monitor|logging|metric/i, "cloudwatch"],
+  [/\bvpc\b|vnet|virtual network|subnet|network/i, "vpc"],
+  [/\bec2\b|compute engine|virtual machine|\bvm\b|instance|server|compute|web ?server|app ?server/i, "ec2"],
 ];
 
 function guessType(label: string): string | null {
@@ -56,9 +61,10 @@ const EDGE =
 /**
  * Best-effort conversion of an AI-generated Mermaid flowchart into an editable
  * graph. Unknown node shapes are ignored; labels that don't map to a known
- * component fall back to a generic EC2 box so nothing is silently dropped.
+ * component fall back to a generic VM box so nothing is silently dropped.
+ * Node labels are resolved to the given provider's service names.
  */
-export function mermaidToGraph(chart: string): SeedGraph {
+export function mermaidToGraph(chart: string, provider: CloudProvider = "aws"): SeedGraph {
   if (!chart) return { nodes: [], edges: [] };
   const clean = chart.replace(/^```mermaid\s*/i, "").replace(/```\s*$/, "");
 
@@ -118,7 +124,7 @@ export function mermaidToGraph(chart: string): SeedGraph {
     return {
       id,
       type,
-      label: CATALOG.find((c) => c.type === type)?.label ?? label,
+      label: specFor(type, provider)?.label ?? label,
       position: { x: d * COL_W + 40, y: row * ROW_H + 40 },
     };
   });

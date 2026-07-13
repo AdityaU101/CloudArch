@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Server, LayoutGrid, Plus, ShieldCheck, Sparkles, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Server, LayoutGrid, Plus, ShieldCheck, Sparkles, PanelLeftClose, PanelLeft, LogOut, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -57,6 +58,46 @@ function NavItem({
         )}
       </AnimatePresence>
     </Link>
+  );
+}
+
+function UserBox({ collapsed }: { collapsed: boolean }) {
+  const { user, logout, isLoggingOut } = useAuth();
+  if (!user) return null;
+
+  const initials = user.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  return (
+    <div className={cn("mx-3 mb-1 flex items-center gap-2.5 rounded-lg border border-border bg-card/60 p-2", collapsed && "justify-center border-transparent bg-transparent p-0")}>
+      <div
+        title={collapsed ? user.name : undefined}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary ring-1 ring-primary/20"
+      >
+        {initials || "?"}
+      </div>
+      {!collapsed && (
+        <>
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="truncate text-xs font-medium text-foreground">{user.name}</div>
+            <div className="truncate text-[10px] text-muted-foreground">{user.email}</div>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            disabled={isLoggingOut}
+            title="Sign out"
+            className="hover-elevate flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {isLoggingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -127,6 +168,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <UserBox collapsed={collapsed} />
 
         <button
           type="button"

@@ -9,6 +9,63 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Create an account and start a session
+ */
+export const registerBodyEmailMin = 3;
+
+export const registerBodyPasswordMin = 8;
+
+
+
+
+export const RegisterBody = zod.object({
+  "email": zod.string().min(registerBodyEmailMin),
+  "password": zod.string().min(registerBodyPasswordMin),
+  "name": zod.string().min(1)
+})
+
+export const RegisterResponse = zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "workspaceId": zod.number().describe('The user\'s personal workspace')
+})
+
+
+/**
+ * @summary Log in with email and password
+ */
+export const LoginBody = zod.object({
+  "email": zod.string(),
+  "password": zod.string()
+})
+
+export const LoginResponse = zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "workspaceId": zod.number().describe('The user\'s personal workspace')
+})
+
+
+/**
+ * @summary End the current session
+ */
+export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Get the currently authenticated user
+ */
+export const GetCurrentUserResponse = zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "workspaceId": zod.number().describe('The user\'s personal workspace')
+})
+
+
+/**
  * Returns server health status
  * @summary Health check
  */
@@ -185,6 +242,112 @@ export const DownloadTerraformParams = zod.object({
 })
 
 export const DownloadTerraformResponse = zod.string()
+
+
+/**
+ * @summary Regenerate one section of a saved architecture (SSE stream)
+ */
+export const RegenerateSectionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RegenerateSectionBody = zod.object({
+  "section": zod.enum(['diagram', 'terraform', 'costEstimate', 'securityRecommendations', 'highAvailabilityPlan', 'databaseRecommendation', 'kubernetesDeployment', 'cicdPipeline', 'monitoringSetup', 'disasterRecovery', 'threatModel']).describe('A regenerable content section of an architecture'),
+  "instructions": zod.string().optional().describe('Optional extra guidance for the regeneration')
+})
+
+export const RegenerateSectionResponse = zod.unknown()
+
+
+/**
+ * @summary List version history for an architecture (newest first)
+ */
+export const ListVersionsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListVersionsResponseItem = zod.object({
+  "id": zod.number(),
+  "architectureId": zod.number(),
+  "versionNumber": zod.number(),
+  "reason": zod.string(),
+  "changedFields": zod.array(zod.string()),
+  "editorName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListVersionsResponse = zod.array(ListVersionsResponseItem)
+
+
+/**
+ * @summary Get one version including its full snapshot
+ */
+export const GetVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const GetVersionResponse = zod.object({
+  "id": zod.number(),
+  "architectureId": zod.number(),
+  "versionNumber": zod.number(),
+  "reason": zod.string(),
+  "changedFields": zod.array(zod.string()),
+  "editorName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}).and(zod.object({
+  "snapshot": zod.record(zod.string(), zod.string()).describe('Content fields as they were before the change')
+}))
+
+
+/**
+ * @summary Restore the architecture to a previous version's snapshot
+ */
+export const RollbackToVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const RollbackToVersionResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "requirements": zod.string(),
+  "provider": zod.enum(['aws', 'azure', 'gcp']).describe('Target cloud provider'),
+  "diagram": zod.string().describe('Mermaid diagram source'),
+  "terraform": zod.string().describe('Terraform HCL content'),
+  "costEstimate": zod.string(),
+  "securityRecommendations": zod.string(),
+  "highAvailabilityPlan": zod.string(),
+  "databaseRecommendation": zod.string(),
+  "kubernetesDeployment": zod.string(),
+  "cicdPipeline": zod.string(),
+  "monitoringSetup": zod.string(),
+  "disasterRecovery": zod.string(),
+  "threatModel": zod.string().describe('STRIDE threat model as a JSON document'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Query the audit trail for the current user's workspace
+ */
+export const listAuditLogsQueryLimitDefault = 50;
+
+export const ListAuditLogsQueryParams = zod.object({
+  "architectureId": zod.coerce.number().optional().describe('Limit results to one architecture'),
+  "limit": zod.coerce.number().default(listAuditLogsQueryLimitDefault)
+})
+
+export const ListAuditLogsResponseItem = zod.object({
+  "id": zod.number(),
+  "actionType": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.number().nullable(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "userName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAuditLogsResponse = zod.array(ListAuditLogsResponseItem)
 
 
 /**

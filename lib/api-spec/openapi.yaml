@@ -10,11 +10,94 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication and session management
   - name: architectures
     description: Cloud architecture generation and management
+  - name: versions
+    description: Architecture version history and rollback
+  - name: audit
+    description: Read-only audit trail of user actions
   - name: validations
     description: Infrastructure-as-code validation and scoring
 paths:
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Create an account and start a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Account created; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: End the current session
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the currently authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /healthz:
     get:
       operationId: healthCheck
@@ -174,6 +257,144 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /architectures/{id}/regenerate-section:
+    post:
+      operationId: regenerateSection
+      tags: [architectures]
+      summary: Regenerate one section of a saved architecture (SSE stream)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerateSectionInput"
+      responses:
+        "200":
+          description: SSE stream ending with the regenerated section content
+          content:
+            text/event-stream: {}
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /architectures/{id}/versions:
+    get:
+      operationId: listVersions
+      tags: [versions]
+      summary: List version history for an architecture (newest first)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Version summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArchitectureVersionSummary"
+
+  /architectures/{id}/versions/{versionId}:
+    get:
+      operationId: getVersion
+      tags: [versions]
+      summary: Get one version including its full snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Version with snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchitectureVersion"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /architectures/{id}/versions/{versionId}/rollback:
+    post:
+      operationId: rollbackToVersion
+      tags: [versions]
+      summary: Restore the architecture to a previous version's snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Architecture after rollback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Architecture"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [audit]
+      summary: Query the audit trail for the current user's workspace
+      parameters:
+        - name: architectureId
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Limit results to one architecture
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLogEntry"
+
   /validations/analyze:
     post:
       operationId: validateInfrastructure
@@ -218,6 +439,124 @@ components:
       type: string
       description: Target cloud provider
       enum: [aws, azure, gcp]
+
+    AuthUser:
+      type: object
+      required: [id, email, name, workspaceId]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        workspaceId:
+          type: integer
+          description: The user's personal workspace
+
+    RegisterInput:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+          minLength: 1
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    ArchitectureSection:
+      type: string
+      description: A regenerable content section of an architecture
+      enum:
+        - diagram
+        - terraform
+        - costEstimate
+        - securityRecommendations
+        - highAvailabilityPlan
+        - databaseRecommendation
+        - kubernetesDeployment
+        - cicdPipeline
+        - monitoringSetup
+        - disasterRecovery
+        - threatModel
+
+    RegenerateSectionInput:
+      type: object
+      required: [section]
+      properties:
+        section:
+          $ref: "#/components/schemas/ArchitectureSection"
+        instructions:
+          type: string
+          description: Optional extra guidance for the regeneration
+
+    ArchitectureVersionSummary:
+      type: object
+      required: [id, architectureId, versionNumber, reason, changedFields, editorName, createdAt]
+      properties:
+        id:
+          type: integer
+        architectureId:
+          type: integer
+        versionNumber:
+          type: integer
+        reason:
+          type: string
+        changedFields:
+          type: array
+          items:
+            type: string
+        editorName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    ArchitectureVersion:
+      allOf:
+        - $ref: "#/components/schemas/ArchitectureVersionSummary"
+        - type: object
+          required: [snapshot]
+          properties:
+            snapshot:
+              type: object
+              additionalProperties:
+                type: string
+              description: Content fields as they were before the change
+
+    AuditLogEntry:
+      type: object
+      required: [id, actionType, entityType, entityId, metadata, userName, createdAt]
+      properties:
+        id:
+          type: integer
+        actionType:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: ["integer", "null"]
+        metadata:
+          type: object
+          additionalProperties: true
+        userName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
 
     Architecture:
       type: object
